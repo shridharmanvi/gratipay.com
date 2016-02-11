@@ -48,7 +48,7 @@ def link(db, log, network, user_id, address, exchange_id, ref, status):
     db.run( "UPDATE exchanges SET status=%s, route=%s, ref=%s WHERE id=%s"
           , (status, route.id, ref, exchange_id)
            )
-    log(participant.username, participant.id, address, exchange_id, ref, status)
+    log(network, participant.username, participant.id, address, exchange_id, ref, status)
 
 
 def main(db, log):
