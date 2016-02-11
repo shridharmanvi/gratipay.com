@@ -8,12 +8,12 @@ Symlink a directory of data at `./backfill` and then call like so:
 Data files should be one per network (named `samurai`, `stripe`, etc), as CSVs
 with these columns:
 
-    user_id         required    Gratipay participant.id
     username        ignored
+    user_id         required    Gratipay participant.id
     address         optional    defaults to 'fake-deadbeef'
     exchange_id     required    Gratipay exchanges.id
-    status          optional    defaults to 'succeeded'
     ref             optional    defaults to 'fake-beeffeed'
+    status          required    Gratipay exchanges.status: succeeded, failed, pending
 
 For successfully backfilled exchanges (and routes), the script outputs the same
 CSV as was input, with optional fields filled in. The script is idempotent (the
@@ -40,7 +40,7 @@ def fake(*a):
     return 'fake-' + sha.new(''.join(map(str, a))).hexdigest()
 
 
-def link(db, log, user_id, network, address, exchange_id, status, ref):
+def link(db, log, network, user_id, address, exchange_id, ref, status):
     participant = Participant.from_id(user_id)
     route = ExchangeRoute.from_network(participant, network)
     if route is None:
@@ -48,20 +48,21 @@ def link(db, log, user_id, network, address, exchange_id, status, ref):
     db.run( "UPDATE exchanges SET status=%s, route=%s, ref=%s WHERE id=%s"
           , (status, route.id, ref, exchange_id)
            )
-    log(participant.id, participant.username, address, exchange_id, status, ref )
+    log(participant.username, participant.id, address, exchange_id, ref, status)
 
 
 def main(db, log):
     for network in os.listdir('backfill'):
+        if network.startswith('_'): continue
         data = csv.reader(open(path.join('backfill', network)))
-        for user_id, _, address, exchange_id, status, ref in data:
+        for _, user_id, address, exchange_id, ref, status in data:
             assert user_id
-            address = address or fake(user_id, network)
+            address = address or fake(network, user_id)
             assert exchange_id
-            status = status or 'succeeded'
-            ref = ref or fake(user_id, network, exchange_id)
+            ref = ref or fake(network, user_id, exchange_id)
+            assert status
 
-            link(db, log, user_id, network, address, exchange_id, status, ref)
+            link(db, log, network, user_id, address, exchange_id, ref, status)
 
 
 if __name__ == '__main__':
