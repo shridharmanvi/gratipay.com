@@ -23,7 +23,6 @@ def find(db, rec):
 
 
 def fuzz(db, rec):
-    import pdb; pdb.set_trace()
     return db.all("""
 
         SELECT e.*, p.id as user_id
@@ -39,7 +38,7 @@ def fuzz(db, rec):
 
 def process_month(db, year, month):
     reader = csv.reader(open('3912/{}/{}/_stripe-payments.csv'.format(year, month)))
-    writer = csv.writer(open('3912/{}/{}/stripe'.format(year, month), 'w'))
+    writer = csv.writer(open('3912/{}/{}/stripe'.format(year, month), 'w+'))
 
     def emit(match, rec):
         writer.writerow([ match.participant
@@ -56,7 +55,7 @@ def process_month(db, year, month):
 
     for row in reader:
         rec = dict(zip(headers, row))
-        rec['Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
+        rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
 
         exact = find(db, rec)
         if exact:
@@ -65,9 +64,9 @@ def process_month(db, year, month):
         else:
             inexact.append(rec)
 
-    for row in inexact:
+    for rec in inexact:
         fuzzed = fuzz(db, rec)
-        possible = [m for m in fuzzed if not m.id in matched]
+        possible = [m for m in fuzzed if not m.user_id in matched]
         assert len(possible) == 1, possible
         guess = possible[0]
         print(rec['Description'], '=>', guess.participant)
