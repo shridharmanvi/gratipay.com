@@ -8,6 +8,7 @@ from gratipay import wireup
 
 
 def find(db, rec):
+    print("find", rec['Description'])
     return db.one("""
 
         SELECT e.*, p.id as user_id
@@ -23,6 +24,7 @@ def find(db, rec):
 
 
 def fuzz(db, rec):
+    print("fuzz", rec['Description'])
     return db.all("""
 
         SELECT e.*, p.id as user_id
@@ -46,6 +48,9 @@ def process_month(db, year, month):
     inexact = []
     ordered = []
 
+    header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
+
+    header("FIRST PASS")
     for row in reader:
         rec = dict(zip(headers, row))
         rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
@@ -62,6 +67,7 @@ def process_month(db, year, month):
         else:
             inexact.append(rec)
 
+    header("SECOND PASS")
     for rec in inexact:
         fuzzed = fuzz(db, rec)
         possible = [m for m in fuzzed if not m.user_id in matched]
@@ -70,6 +76,7 @@ def process_month(db, year, month):
         print(rec['Description'], '=>', guess.participant)
         rec2mat[rec['id']] = guess
 
+    header("THIRD PASS")
     for rec in ordered:
         match = rec2mat[rec['id']]
         writer.writerow([ match.participant
