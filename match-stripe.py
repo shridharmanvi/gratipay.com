@@ -50,6 +50,9 @@ def process_month(db, year, month):
         rec = dict(zip(headers, row))
         rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
 
+        if rec['id'] == 'ch_Pi3yBdmevsIr5q':
+            continue  # special-case the first test transaction
+
         ordered.append(rec)
 
         match = find(db, rec)
