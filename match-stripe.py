@@ -40,27 +40,22 @@ def process_month(db, year, month):
     reader = csv.reader(open('3912/{}/{}/_stripe-payments.csv'.format(year, month)))
     writer = csv.writer(open('3912/{}/{}/stripe'.format(year, month), 'w+'))
 
-    def emit(match, rec):
-        writer.writerow([ match.participant
-                        , match.user_id
-                        , rec['Customer ID']
-                        , match.id
-                        , rec['id']
-                        , rec['Status']
-                         ])
-
     headers = next(reader)
     matched = []
+    rec2mat = {}
     inexact = []
+    ordered = []
 
     for row in reader:
         rec = dict(zip(headers, row))
         rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
 
-        exact = find(db, rec)
-        if exact:
-            emit(exact, rec)
-            matched.append(exact.user_id)
+        ordered.append(rec)
+
+        match = find(db, rec)
+        if match:
+            matched.append(match.user_id)
+            rec2mat[rec['id']] = match
         else:
             inexact.append(rec)
 
@@ -70,7 +65,17 @@ def process_month(db, year, month):
         assert len(possible) == 1, possible
         guess = possible[0]
         print(rec['Description'], '=>', guess.participant)
-        emit(guess, rec)
+        rec2mat[rec['id']] = guess
+
+    for rec in ordered:
+        match = rec2mat[rec['id']]
+        writer.writerow([ match.participant
+                        , match.user_id
+                        , rec['Customer ID']
+                        , match.id
+                        , rec['id']
+                        , rec['Status']
+                         ])
 
 
 def main(db):
