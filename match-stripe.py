@@ -1,41 +1,47 @@
 #!/usr/bin/env python2
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
 import csv
+import os
+import sys
 
 from gratipay import wireup
 
 
-def find(db, rec):
-    print("find", rec['Description'])
-    return db.one("""
+FUZZ = """
 
         SELECT e.*, p.id as user_id
           FROM exchanges e
           JOIN participants p
             ON e.participant = p.username
-         WHERE "timestamp" - %(Created)s < '60 seconds'::interval
+         WHERE (
+                ((("timestamp" - %(Created)s) < '0 seconds') AND
+                 (("timestamp" - %(Created)s) > '-60 seconds'))
+                 OR
+                (("timestamp" - %(Created)s) = '0 seconds')
+                 OR
+                ((("timestamp" - %(Created)s) > '0 seconds') AND
+                 (("timestamp" - %(Created)s) < '60 seconds'))
+               )
            AND amount + fee = %(Amount)s
            AND amount > 0
+
+"""
+FIND = FUZZ + """
+
            AND participant = %(Description)s
 
-    """, rec)
+"""
 
 
-def fuzz(db, rec):
-    print("fuzz", rec['Description'])
-    return db.all("""
+def find(log, db, rec):
+    log("finding", rec['Description'])
+    return db.one(FIND, rec)
 
-        SELECT e.*, p.id as user_id
-          FROM exchanges e
-          JOIN participants p
-            ON e.participant = p.username
-         WHERE "timestamp" - %(Created)s < '60 seconds'::interval
-           AND amount + fee = %(Amount)s
-           AND amount > 0
 
-    """, rec)
+def fuzz(log, db, rec):
+    log("fuzzing", rec['Description'], end='')
+    return db.all(FUZZ, rec)
 
 
 def process_month(db, year, month):
@@ -49,8 +55,9 @@ def process_month(db, year, month):
     ordered = []
 
     header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
+    log = lambda *a, **kw: print('{}-{}'.format(year, month), *a, **kw)
 
-    header("FIRST PASS")
+    header("FINDING")
     for row in reader:
         rec = dict(zip(headers, row))
         rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
@@ -58,47 +65,62 @@ def process_month(db, year, month):
         if rec['id'] == 'ch_Pi3yBdmevsIr5q':
             continue  # special-case the first test transaction
 
+        if rec['Status'] == 'Failed':
+            print("{} is a FAILURE!!!!!!!".format(rec['Description']))
+            continue  # right?
+
         ordered.append(rec)
 
-        match = find(db, rec)
+        match = find(log, db, rec)
         if match:
             matched.append(match.user_id)
             rec2mat[rec['id']] = match
         else:
             inexact.append(rec)
 
-    header("SECOND PASS")
+    header("FUZZING")
     for rec in inexact:
-        fuzzed = fuzz(db, rec)
+        fuzzed = fuzz(log, db, rec)
         possible = [m for m in fuzzed if not m.user_id in matched]
-        assert len(possible) == 1, possible
-        guess = possible[0]
-        print(rec['Description'], '=>', guess.participant)
-        rec2mat[rec['id']] = guess
+        npossible = len(possible)
+        print(' => ', end='')
+        if npossible > 1:
+            print(' OR '.join([p.participant for p in possible]))
+        elif npossible == 1:
+            guess = possible[0]
+            print(guess.participant)
+            rec2mat[rec['id']] = guess
+        else:
+            print('???', rec['Amount'], rec['Created'])
 
-    header("THIRD PASS")
+    header("WRITING")
     for rec in ordered:
-        match = rec2mat[rec['id']]
-        writer.writerow([ match.participant
-                        , match.user_id
-                        , rec['Customer ID']
-                        , match.id
-                        , rec['id']
-                        , rec['Status']
-                         ])
+        match = rec2mat.get(rec['id'])
+        if match is None:
+            log("skipping", rec['Description'])
+        else:
+            writer.writerow([ match.participant
+                            , match.user_id
+                            , rec['Customer ID']
+                            , match.id
+                            , rec['id']
+                            , rec['Status']
+                             ])
 
 
-def main(db):
+def main(db, constraint):
     for year in os.listdir('3912'):
         if not year.isdigit(): continue
         for month in os.listdir('3912/' + year):
             if not month.isdigit(): continue
+            if constraint and not '{}-{}'.format(year, month) == constraint: continue
             process_month(db, year, month)
 
 
 if __name__ == '__main__':
     db = wireup.db(wireup.env())
-    main(db)
+    constraint = '' if len(sys.argv) < 2 else sys.argv[1]
+    main(db, constraint)
 
 
 """
