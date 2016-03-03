@@ -16,12 +16,12 @@ FUZZ = """
             ON e.participant = p.username
          WHERE (
                 ((("timestamp" - %(Created)s) < '0 seconds') AND
-                 (("timestamp" - %(Created)s) > '-60 seconds'))
+                 (("timestamp" - %(Created)s) > '-61 seconds'))
                  OR
                 (("timestamp" - %(Created)s) = '0 seconds')
                  OR
                 ((("timestamp" - %(Created)s) > '0 seconds') AND
-                 (("timestamp" - %(Created)s) < '60 seconds'))
+                 (("timestamp" - %(Created)s) < '61 seconds'))
                )
            AND amount + fee = %(Amount)s
            AND amount > 0
