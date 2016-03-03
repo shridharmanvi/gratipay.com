@@ -53,6 +53,7 @@ def process_month(db, year, month):
     rec2mat = {}
     inexact = []
     ordered = []
+    fuz2mat = {}
 
     header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
     log = lambda *a, **kw: print('{}-{}'.format(year, month), *a, **kw)
@@ -80,18 +81,30 @@ def process_month(db, year, month):
 
     header("FUZZING")
     for rec in inexact:
+        guess = fuz2mat.get(rec['Description'])
+
         fuzzed = fuzz(log, db, rec)
         possible = [m for m in fuzzed if not m.user_id in matched]
         npossible = len(possible)
         print(' => ', end='')
-        if npossible > 1:
-            print(' OR '.join([p.participant for p in possible]))
+
+        match = None
+        if npossible == 0:
+            print('???', rec['Amount'], rec['Created'])  # should log "skipping" below
         elif npossible == 1:
-            guess = possible[0]
-            print(guess.participant)
-            rec2mat[rec['id']] = guess
+            match = possible[0]
+            if rec['Description'] in fuz2mat:
+                print('(again) ', end='')
+            else:
+                fuz2mat[rec['Description']] = match
         else:
-            print('???', rec['Amount'], rec['Created'])
+            match = {m.participant:m for m in possible}.get(guess.participant)
+            if not match:
+                print(' OR '.join([p.participant for p in possible]))
+
+        if match:
+            print(match.participant)
+            rec2mat[rec['id']] = match
 
     header("WRITING")
     for rec in ordered:
