@@ -36,7 +36,7 @@ FIND = FUZZ + """
 
 
 def find(log, db, rec):
-    log("finding", rec['Description'])
+    log("finding", rec['Description'], end=' => ')
     return db.one(FIND, rec)
 
 
@@ -50,42 +50,51 @@ def process_month(db, year, month):
     writer = csv.writer(open('3912/{}/{}/stripe'.format(year, month), 'w+'))
 
     headers = next(reader)
-    matched = []
     rec2mat = {}
     inexact = []
     ordered = []
-    fuz2mat = {}
+    cid2mat = {}
+    uid2cid = {}
 
     header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
-    log = lambda *a, **kw: print('{}-{}'.format(year, month), *a, **kw)
 
     header("FINDING")
     for row in reader:
         rec = dict(zip(headers, row))
         rec[b'Created'] = rec.pop('Created (UTC)')  # to make SQL interpolation easier
 
+        log = lambda *a, **kw: print(rec['Created'], *a, **kw)
+
         if rec['id'] == 'ch_Pi3yBdmevsIr5q':
             continue  # special-case the first test transaction
 
-        if rec['Status'] == 'Failed':
-            print("{} is a FAILURE!!!!!!!".format(rec['Description']))
+        if rec['Status'] != 'Paid':
+            log("{Description} is {Status}!!!!!!!".format(**rec))
             continue  # right?
 
         ordered.append(rec)
 
         match = find(log, db, rec)
         if match:
-            matched.append(match.user_id)
+            uid = match.user_id
+            known = uid2cid.get(uid)
+            if known:
+                assert rec['Customer ID'] == known, (rec, match)
+            else:
+                cid2mat[rec['Customer ID']] = match
+                uid2cid[uid] = rec['Customer ID']
             rec2mat[rec['id']] = match
+            print('yes')
         else:
             inexact.append(rec)
+            print('no')
 
     header("FUZZING")
     for rec in inexact:
-        guess = fuz2mat.get(rec['Customer ID'])
+        guess = cid2mat.get(rec['Customer ID'])
 
         fuzzed = fuzz(log, db, rec)
-        possible = [m for m in fuzzed if not m.user_id in matched]
+        possible = [m for m in fuzzed if not m.user_id in uid2cid]
         npossible = len(possible)
         print(' => ', end='')
 
@@ -94,10 +103,10 @@ def process_month(db, year, month):
             print('???', rec['Amount'], rec['Created'])  # should log "skipping" below
         elif npossible == 1:
             match = possible[0]
-            if rec['Customer ID'] in fuz2mat:
+            if rec['Customer ID'] in cid2mat:
                 print('(again) ', end='')
             else:
-                fuz2mat[rec['Customer ID']] = match
+                cid2mat[rec['Customer ID']] = match
         elif guess:
             match = {m.participant:m for m in possible}.get(guess.participant)
 
@@ -111,7 +120,7 @@ def process_month(db, year, month):
     for rec in ordered:
         match = rec2mat.get(rec['id'])
         if match is None:
-            log("skipping", rec['Description'])
+            log("skipping", rec['Description'], rec['id'])
         else:
             writer.writerow([ match.participant
                             , match.user_id
