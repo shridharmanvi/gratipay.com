@@ -16,15 +16,16 @@ FUZZ = """
             ON e.participant = p.username
          WHERE (
                 ((("timestamp" - %(Created)s) < '0 seconds') AND
-                 (("timestamp" - %(Created)s) > '-61 seconds'))
+                 (("timestamp" - %(Created)s) > '-62 seconds'))
                  OR
                 (("timestamp" - %(Created)s) = '0 seconds')
                  OR
                 ((("timestamp" - %(Created)s) > '0 seconds') AND
-                 (("timestamp" - %(Created)s) < '61 seconds'))
+                 (("timestamp" - %(Created)s) < '62 seconds'))
                )
            AND amount + fee = %(Amount)s
            AND amount > 0
+           AND recorder IS NULL -- filter out PayPal
 
 """
 FIND = FUZZ + """
