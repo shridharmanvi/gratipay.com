@@ -100,7 +100,7 @@ def process_month(db, year, month):
 
         match = None
         if npossible == 0:
-            print('???', rec['Amount'], rec['Created'])  # should log "skipping" below
+            print('???', rec['Amount'], end='')  # should log "skipping" below
         elif npossible == 1:
             match = possible[0]
             if rec['Customer ID'] in cid2mat:
