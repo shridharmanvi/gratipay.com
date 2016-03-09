@@ -46,7 +46,7 @@ def fuzz(log, db, rec):
     return db.all(FUZZ, rec)
 
 
-def process_month(db, year, month):
+def process_month(db, cid2mat, uid2cid, year, month):
     reader = csv.reader(open('3912/{}/{}/_stripe-payments.csv'.format(year, month)))
     writer = csv.writer(open('3912/{}/{}/stripe'.format(year, month), 'w+'))
 
@@ -54,8 +54,6 @@ def process_month(db, year, month):
     rec2mat = {}
     inexact = []
     ordered = []
-    cid2mat = {}
-    uid2cid = {}
 
     header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
 
@@ -138,12 +136,14 @@ def process_month(db, year, month):
 
 
 def main(db, constraint):
+    cid2mat = {}
+    uid2cid = {}
     for year in os.listdir('3912'):
         if not year.isdigit(): continue
         for month in os.listdir('3912/' + year):
             if not month.isdigit(): continue
             if constraint and not '{}-{}'.format(year, month) == constraint: continue
-            process_month(db, year, month)
+            process_month(db, cid2mat, uid2cid, year, month)
 
 
 if __name__ == '__main__':
