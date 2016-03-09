@@ -15,13 +15,13 @@ FUZZ = """
           JOIN participants p
             ON e.participant = p.username
          WHERE (
-                ((("timestamp" - %(Created)s) < '0 seconds') AND
-                 (("timestamp" - %(Created)s) > '-62 seconds'))
+                ((("timestamp" - %(Created)s) < '0 minutes') AND
+                 (("timestamp" - %(Created)s) > '-2 minutes'))
                  OR
-                (("timestamp" - %(Created)s) = '0 seconds')
+                (("timestamp" - %(Created)s) = '0 minutes')
                  OR
-                ((("timestamp" - %(Created)s) > '0 seconds') AND
-                 (("timestamp" - %(Created)s) < '62 seconds'))
+                ((("timestamp" - %(Created)s) > '0 minutes') AND
+                 (("timestamp" - %(Created)s) < '2 minutes'))
                )
            AND amount + fee = %(Amount)s
            AND amount > 0
@@ -81,8 +81,8 @@ def process_month(db, year, month):
             if known:
                 assert rec['Customer ID'] == known, (rec, match)
             else:
-                cid2mat[rec['Customer ID']] = match
                 uid2cid[uid] = rec['Customer ID']
+                cid2mat[rec['Customer ID']] = match
             rec2mat[rec['id']] = match
             print('yes')
         else:
@@ -120,7 +120,7 @@ def process_month(db, year, month):
     for rec in ordered:
         match = rec2mat.get(rec['id'])
         if match is None:
-            log("skipping", rec['Description'], rec['id'])
+            log("skipping", rec['Description'], rec['Customer ID'], rec['id'])
         else:
             writer.writerow([ match.participant
                             , match.user_id
