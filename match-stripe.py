@@ -145,7 +145,9 @@ def process_month(db, cid2mat, uid2cid, year, month):
             writer.writerow([ match.participant
                             , match.user_id
                             , rec['Customer ID']
-                            , ''  # signal to backfill.py to INSERT a new exchange record
+                            , ''
+                            , rec['Created']
+                            , rec['Amount']
                             , rec['id']
                             , rec['Status']
                              ])
@@ -154,6 +156,8 @@ def process_month(db, cid2mat, uid2cid, year, month):
                             , match.user_id
                             , rec['Customer ID']
                             , match.id
+                            , ''
+                            , ''
                             , rec['id']
                             , rec['Status']
                              ])
