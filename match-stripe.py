@@ -69,9 +69,14 @@ def process_month(db, year, month):
         if rec['id'] == 'ch_Pi3yBdmevsIr5q':
             continue  # special-case the first test transaction
 
-        if rec['Status'] != 'Paid':
-            log("{Description} is {Status}!!!!!!!".format(**rec))
-            continue  # right?
+        # translate status to our nomenclature
+        if rec['Status'] == 'Paid':
+            rec['Status'] = 'succeeded'
+        elif rec['Status'] == 'Failed':
+            rec['Status'] = 'failed'
+            continue  # we'll deal with this next
+        else:
+            raise heck
 
         ordered.append(rec)
 
