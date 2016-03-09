@@ -26,6 +26,7 @@ FUZZ = """
            AND amount + fee = %(Amount)s
            AND amount > 0
            AND recorder IS NULL -- filter out PayPal
+           AND route IS NULL -- filter out Balanced
 
 """
 FIND = FUZZ + """
