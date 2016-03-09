@@ -8,7 +8,7 @@ import sys
 from gratipay import wireup
 
 
-FUZZ = """
+FUZZ = """\
 
         SELECT e.*, p.id as user_id
           FROM exchanges e
@@ -29,9 +29,18 @@ FUZZ = """
            AND route IS NULL -- filter out Balanced
 
 """
-FIND = FUZZ + """
+FIND = FUZZ + """\
 
            AND participant = %(Description)s
+
+"""
+
+HAIL_MARY = """\
+
+        SELECT username AS participant
+             , id AS user_id
+          FROM participants
+         WHERE username=%(Description)s
 
 """
 
@@ -44,6 +53,11 @@ def find(log, db, rec):
 def fuzz(log, db, rec):
     log("fuzzing", rec['Description'], end='')
     return db.all(FUZZ, rec)
+
+
+def hail_mary(log, db, rec):
+    log("full of grace", rec['Description'])
+    return db.one(HAIL_MARY, rec)
 
 
 def process_month(db, cid2mat, uid2cid, year, month):
@@ -67,6 +81,8 @@ def process_month(db, cid2mat, uid2cid, year, month):
         if rec['id'] == 'ch_Pi3yBdmevsIr5q':
             continue  # special-case the first test transaction
 
+        ordered.append(rec)
+
         # translate status to our nomenclature
         if rec['Status'] == 'Paid':
             rec['Status'] = 'succeeded'
@@ -75,8 +91,6 @@ def process_month(db, cid2mat, uid2cid, year, month):
             continue  # we'll deal with this next
         else:
             raise heck
-
-        ordered.append(rec)
 
         match = find(log, db, rec)
         if match:
@@ -124,7 +138,17 @@ def process_month(db, cid2mat, uid2cid, year, month):
     for rec in ordered:
         match = rec2mat.get(rec['id'])
         if match is None:
-            log("skipping", rec['Description'], rec['Customer ID'], rec['id'])
+            assert rec['Status'] == 'failed'
+            match = cid2mat.get(rec['Customer ID'])  # *any* successful exchanges for this user?
+            if not match:
+                match = hail_mary(log, db, rec)
+            writer.writerow([ match.participant
+                            , match.user_id
+                            , rec['Customer ID']
+                            , ''  # signal to backfill.py to INSERT a new exchange record
+                            , rec['id']
+                            , rec['Status']
+                             ])
         else:
             writer.writerow([ match.participant
                             , match.user_id
