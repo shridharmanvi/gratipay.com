@@ -2,6 +2,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import csv
+import datetime
 import os
 import sys
 from os import path
@@ -61,9 +62,11 @@ def hail_mary(log, db, rec):
 
 
 def process_month(db, cid2mat, uid2cid, year, month):
-    if not path.isfile(path.join('3912', year, month, '_balanced.csv')): return
-    reader = csv.reader(open(path.join('3912', year, month, '_balanced.csv')))
-    writer = csv.writer(open(path.join('3912', year, month, 'balanced.csv'), 'w+'))
+    input_csv = path.join('3912', year, month, '_balanced.csv')
+    match_csv = path.join('3912', year, month, 'balanced')
+    if not path.isfile(input_csv): return
+    reader = csv.reader(open(input_csv))
+    writer = csv.writer(open(match_csv, 'w+'))
 
     headers = next(reader)
     rec2mat = {}
@@ -77,14 +80,15 @@ def process_month(db, cid2mat, uid2cid, year, month):
         rec = dict(zip(headers, row))
         rec = dict({unicode(k):v for k,v in dict(rec).items()})
 
+        if rec['id'] in ('WD7qFYL9rqIrCUmbXsgJJ8HT', 'WD16Zqy9ISWN5muEhXo19vpn'):
+            continue  # special-case the first test transactions
+
         # convert cents to dollars
         rec['amount'] = '{}.{}'.format(rec['amount'][:-2], rec['amount'][-2:])
         if rec['amount'].startswith('.'):
             rec['amount'] = '0' + rec['amount']
 
         log = lambda *a, **kw: print(rec['created_at'], *a, **kw)
-
-        ordered.append(rec)
 
         # translate status to our nomenclature
         if rec['status'] in ('succeeded', 'failed'):
@@ -94,33 +98,42 @@ def process_month(db, cid2mat, uid2cid, year, month):
 
         if rec['kind'] == 'card_hold':
             continue
+
         if rec['kind'] == 'credit':
             rec['amount'] = '-' + rec['amount']
+        elif rec['kind'] == 'debit':
+            pass
+        else:
+            raise heck
+
+        cid = rec['links__customer']
+        ordered.append(rec)
 
         match = find(log, db, rec)
-        if match and match.route is not None:
-            assert match.ref == rec['id']
-            assert match.status is not None
-            assert match.route is not None
-            ordered.pop()
-            print('all set!')
-        elif match:
+        if match:
             uid = match.user_id
             known = uid2cid.get(uid)
             if known:
-                assert rec['links_customer'] == known, (rec, match)
+                assert cid == known, (rec, match)
             else:
-                uid2cid[uid] = rec['links_customer']
-                cid2mat[rec['links_customer']] = match
+                uid2cid[uid] = cid
+                cid2mat[cid] = match
             rec2mat[rec['id']] = match
-            print('yes')
+
+            if match.route is not None:
+                assert match.ref == rec['id']
+                assert match.status is not None
+                ordered.pop()
+                print('all set!')
+            else:
+                print('yes')
         else:
             inexact.append(rec)
             print('no')
 
     header("FUZZING")
     for rec in inexact:
-        guess = cid2mat.get(rec['links_customer'])
+        guess = cid2mat.get(cid)
 
         fuzzed = fuzz(log, db, rec)
         possible = [m for m in fuzzed if not m.user_id in uid2cid]
@@ -132,45 +145,63 @@ def process_month(db, cid2mat, uid2cid, year, month):
             print('???', rec['amount'], end='')  # should log "skipping" below
         elif npossible == 1:
             match = possible[0]
-            if rec['links_customer'] in cid2mat:
+            if cid in cid2mat:
                 print('(again) ', end='')
             else:
-                cid2mat[rec['links_customer']] = match
+                cid2mat[cid] = match
         elif guess:
             match = {m.participant:m for m in possible}.get(guess.participant)
 
         if match:
             print(match.participant)
-            rec2mat[rec['id']] = match
         else:
-            print(' OR '.join([p.participant for p in possible]))
+            mindelta = None
+
+            date, time = rec['created_at'].split('T')
+            Y,M,D = date.split('-')
+            h,m,s = time.split(':')
+            s,ms = s.split('.')
+            ms = ms[:-1]
+            Y,M,D,h,m,s,ms = [int(x) for x in (Y,M,D,h,m,s,ms)]
+            ts_balanced = datetime.datetime(Y,M,D,h,m,s,ms, possible[0].timestamp.tzinfo)
+
+            for p in possible:
+                delta = abs(ts_balanced - p.timestamp)
+                if mindelta is None or (delta < mindelta):
+                    mindelta = delta
+                    match = p
+
+            possible.remove(match)
+            print(match.participant, 'INSTEAD OF', ' OR '.join([p.participant for p in possible]))
+
+        rec2mat[rec['id']] = match
 
     header("WRITING")
     for rec in ordered:
         match = rec2mat.get(rec['id'])
         if match is None:
-            assert rec['status'] == 'failed'
-            match = cid2mat.get(rec['links_customer'])  # *any* successful exchanges for this user?
+            assert rec['status'] == 'failed', rec['id']
+            match = cid2mat.get(cid)  # *any* successful exchanges for this user?
             if not match:
                 match = hail_mary(log, db, rec)
             writer.writerow([ match.participant
                             , match.user_id
-                            , rec['Customer ID']
+                            , rec['links__customer']
                             , ''
-                            , rec['Created']
-                            , rec['Amount']
+                            , rec['created_at']
+                            , rec['amount']
                             , rec['id']
-                            , rec['Status']
+                            , rec['status']
                              ])
         else:
             writer.writerow([ match.participant
                             , match.user_id
-                            , rec['Customer ID']
+                            , rec['links__customer']
                             , match.id
                             , ''
                             , ''
                             , rec['id']
-                            , rec['Status']
+                            , rec['status']
                              ])
 
 
