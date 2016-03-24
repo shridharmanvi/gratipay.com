@@ -18,15 +18,18 @@ FUZZ = """\
             ON e.participant = p.username
          WHERE (
                 ((("timestamp" - %(created_at)s) < '0 minutes') AND
-                 (("timestamp" - %(created_at)s) > '-2 minutes'))
+                 (("timestamp" - %(created_at)s) > '-7 minutes'))
                  OR
                 (("timestamp" - %(created_at)s) = '0 minutes')
                  OR
                 ((("timestamp" - %(created_at)s) > '0 minutes') AND
-                 (("timestamp" - %(created_at)s) < '2 minutes'))
+                 (("timestamp" - %(created_at)s) < '7 minutes'))
                )
-           AND amount + fee = %(amount)s
-           AND amount > 0
+           AND (
+                ((amount > 0) AND (amount + fee = %(amount)s))
+                OR
+                ((amount < 0) AND (amount = %(amount)s))
+               )
            AND recorder IS NULL -- filter out PayPal
 
 """
@@ -78,33 +81,32 @@ def process_month(db, cid2mat, uid2cid, year, month):
     header("FINDING")
     for row in reader:
         rec = dict(zip(headers, row))
-        rec = dict({unicode(k):v for k,v in dict(rec).items()})
+        #rec = dict({unicode(k):v for k,v in dict(rec).items()})
 
+        # special-case the first test transactions
         if rec['id'] in ('WD7qFYL9rqIrCUmbXsgJJ8HT', 'WD16Zqy9ISWN5muEhXo19vpn'):
-            continue  # special-case the first test transactions
+            continue
 
         # convert cents to dollars
         rec['amount'] = '{}.{}'.format(rec['amount'][:-2], rec['amount'][-2:])
         if rec['amount'].startswith('.'):
             rec['amount'] = '0' + rec['amount']
 
-        log = lambda *a, **kw: print(rec['created_at'], *a, **kw)
+        # check status
+        if not rec['status'] in ('succeeded', 'failed'):
+            raise Exception(rec)
 
-        # translate status to our nomenclature
-        if rec['status'] in ('succeeded', 'failed'):
-            pass  # we'll deal with this next
-        else:
-            raise heck
-
+        # check kind
         if rec['kind'] == 'card_hold':
-            continue
-
-        if rec['kind'] == 'credit':
+            continue    # we never tracked these in the Gratipay db
+        elif rec['kind'] in ('credit', 'refund'):
             rec['amount'] = '-' + rec['amount']
-        elif rec['kind'] == 'debit':
+        elif rec['kind'] in ('debit', 'reversal'):
             pass
         else:
-            raise heck
+            raise Exception(rec)
+
+        log = lambda *a, **kw: print(rec['created_at'], *a, **kw)
 
         cid = rec['links__customer']
         ordered.append(rec)
@@ -133,10 +135,12 @@ def process_month(db, cid2mat, uid2cid, year, month):
 
     header("FUZZING")
     for rec in inexact:
+        cid = rec['links__customer']
         guess = cid2mat.get(cid)
 
         fuzzed = fuzz(log, db, rec)
-        possible = [m for m in fuzzed if not m.user_id in uid2cid]
+        keep = lambda m: (not m.user_id in uid2cid) or (guess and m.user_id == guess.user_id)
+        possible = [m for m in fuzzed if keep(m)]
         npossible = len(possible)
         print(' => ', end='')
 
@@ -150,10 +154,14 @@ def process_month(db, cid2mat, uid2cid, year, month):
             else:
                 cid2mat[cid] = match
         elif guess:
+            print('(guessing) ', end='')
             match = {m.participant:m for m in possible}.get(guess.participant)
 
         if match:
             print(match.participant)
+        elif not possible:
+            print(' ... IMPOSSIBLE!!!!!!!!!!!')
+            continue
         else:
             mindelta = None
 
