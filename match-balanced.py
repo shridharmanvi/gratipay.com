@@ -71,6 +71,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
     rec2mat = {}
     inexact = []
     ordered = []
+    failed = set()
 
     header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
 
@@ -157,6 +158,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
             print(match.participant)
         elif not possible:
             print(' ... IMPOSSIBLE!!!!!!!!!!!')
+            failed.add(rec['id'])
             continue
         else:
             mindelta = None
@@ -182,6 +184,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
 
     header("WRITING")
     for rec in ordered:
+        if rec['id'] in failed: continue
         match = rec2mat.get(rec['id'])
         if match is None:
             assert rec['status'] == 'failed', rec['id']
