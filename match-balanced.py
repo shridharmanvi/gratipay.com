@@ -17,13 +17,9 @@ FUZZ = """\
           JOIN participants p
             ON e.participant = p.username
          WHERE (
-                ((("timestamp" - %(created_at)s) < '0 minutes') AND
-                 (("timestamp" - %(created_at)s) > '-7 minutes'))
-                 OR
-                (("timestamp" - %(created_at)s) = '0 minutes')
-                 OR
-                ((("timestamp" - %(created_at)s) > '0 minutes') AND
-                 (("timestamp" - %(created_at)s) < '7 minutes'))
+                (("timestamp" - %(created_at)s) >= '0 minutes')
+                AND
+                (("timestamp" - %(created_at)s) < '7 minutes')
                )
            AND (
                 ((amount > 0) AND (amount + fee = %(amount)s))
