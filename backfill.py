@@ -101,7 +101,7 @@ def process_row(network, _, user_id, address, exchange_id, timestamp, amount, re
         assert ref
         func = make
     else:
-        raise heck
+        assert 0, locals()
 
     func(db, log, network, user_id, address, exchange_id, timestamp, amount, ref, status)
 

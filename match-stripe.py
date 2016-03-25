@@ -90,7 +90,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
             rec['Status'] = 'failed'
             continue  # we'll deal with this next
         else:
-            raise heck
+            assert 0, locals()
 
         match = find(log, db, rec)
         if match:
