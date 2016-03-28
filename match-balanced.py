@@ -120,10 +120,22 @@ def process_month(db, cid2mat, uid2cid, year, month):
             rec2mat[rec['id']] = match
 
             if match.route is not None:
-                assert match.ref == rec['id']
-                assert match.status is not None
-                ordered.pop()
-                print('all set!')
+                if match.ref is None and match.status is None:
+                    print('missing ref and status!')
+                elif match.ref != rec['id'] and match.status != rec['status']:
+                    print('mismatched ref and status!')
+                elif match.ref is None:
+                    print('missing ref!')
+                elif match.ref != rec['id']:
+                    print('mismatched ref!')
+                elif match.status is None:
+                    print('missing status!')
+                elif match.status != rec['status']:
+                    print('mismatched status!')
+
+                else:
+                    ordered.pop()
+                    print('all set!')
             else:
                 print('yes')
         else:
