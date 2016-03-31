@@ -45,22 +45,25 @@ HAIL_MARY = """\
 """
 
 
-def find(log, db, rec):
-    log("finding", rec['description'], end=' => ')
-    return db.one(FIND, rec)
+class Matcher(object):
+
+    def __init__(self, db):
+        self.db = db
+
+    def find(self, log, rec):
+        log("finding", rec['description'], end=' => ')
+        return self.db.one(FIND, rec)
+
+    def fuzz(self, log, rec):
+        log("fuzzing", rec['description'], end='')
+        return self.db.all(FUZZ, rec)
+
+    def hail_mary(self, log, rec):
+        log("full of grace", rec['description'])
+        return self.db.one(HAIL_MARY, rec)
 
 
-def fuzz(log, db, rec):
-    log("fuzzing", rec['description'], end='')
-    return db.all(FUZZ, rec)
-
-
-def hail_mary(log, db, rec):
-    log("full of grace", rec['description'])
-    return db.one(HAIL_MARY, rec)
-
-
-def process_month(db, cid2mat, uid2cid, year, month):
+def process_month(matcher, cid2mat, uid2cid, year, month):
     input_csv = path.join('3912', year, month, '_balanced.csv')
     match_csv = path.join('3912', year, month, 'balanced')
     if not path.isfile(input_csv): return
@@ -108,7 +111,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
         cid = rec['links__customer']
         ordered.append(rec)
 
-        match = find(log, db, rec)
+        match = matcher.find(log, rec)
         if match:
             uid = match.user_id
             known = uid2cid.get(uid)
@@ -147,7 +150,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
         cid = rec['links__customer']
         guess = cid2mat.get(cid)
 
-        fuzzed = fuzz(log, db, rec)
+        fuzzed = matcher.fuzz(log, rec)
         keep = lambda m: (not m.user_id in uid2cid) or (guess and m.user_id == guess.user_id)
         possible = [m for m in fuzzed if keep(m)]
         npossible = len(possible)
@@ -202,7 +205,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
             assert rec['status'] == 'failed', rec['id']
             match = cid2mat.get(cid)  # *any* successful exchanges for this user?
             if not match:
-                match = hail_mary(log, db, rec)
+                match = matcher.hail_mary(log, rec)
             writer.writerow([ match.participant
                             , match.user_id
                             , rec['links__customer']
@@ -224,7 +227,7 @@ def process_month(db, cid2mat, uid2cid, year, month):
                              ])
 
 
-def main(db, constraint):
+def main(matcher, constraint):
     cid2mat = {}
     uid2cid = {}
     for year in os.listdir('3912'):
@@ -232,13 +235,14 @@ def main(db, constraint):
         for month in os.listdir('3912/' + year):
             if not month.isdigit(): continue
             if constraint and not '{}-{}'.format(year, month) == constraint: continue
-            process_month(db, cid2mat, uid2cid, year, month)
+            process_month(matcher, cid2mat, uid2cid, year, month)
 
 
 if __name__ == '__main__':
-    db = wireup.db(wireup.env())
-    constraint = '' if len(sys.argv) < 2 else sys.argv[1]
-    main(db, constraint)
+    _db = wireup.db(wireup.env())
+    _matcher = Matcher(_db)
+    _constraint = '' if len(sys.argv) < 2 else sys.argv[1]
+    main(_matcher, _constraint)
 
 
 """
