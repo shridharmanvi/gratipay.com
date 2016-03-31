@@ -11,20 +11,21 @@ def title(title):
 def report(*patterns):
     N = 0
     for pattern in patterns:
-        n = int(commands.getoutput('grep "{}$" backfill.log | wc -l'.format(pattern)))
+        n = int(commands.getoutput('grep "{}" backfill.log | wc -l'.format(pattern)))
         N += n
         print("{:<28} {:>5}".format(pattern, n))
     print("{:<28} {:>5}".format('', N))
 
 
-report( 'IMPOSSIBLE!!!!!!!!!!!'
-      , 'all set!'
-      , 'yes'
-      , 'no'
-      , 'missing ref and status!'
-      , 'mismatched ref and status!'
-      , 'missing ref!'
-      , 'mismatched ref!'
-      , 'missing status!'
-      , 'mismatched status!'
+report( 'IMPOSSIBLE!!!!!!!!!!!$'
+      , 'all set!$'
+      , 'yes$'
+      , 'no$'
+      , 'missing ref and status!$'
+      , 'mismatched ref and status!$'
+      , 'missing ref!$'
+      , 'mismatched ref!$'
+      , 'missing status!$'
+      , 'mismatched status!$'
+      , 'full of grace'
        )

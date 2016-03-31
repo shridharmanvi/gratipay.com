@@ -35,12 +35,11 @@ FIND = FUZZ + """\
 
 """
 
-HAIL_MARY = """\
+STUBS = """\
 
         SELECT username AS participant
              , id AS user_id
           FROM participants
-         WHERE username=%(description)s
 
 """
 
@@ -49,6 +48,12 @@ class Matcher(object):
 
     def __init__(self, db):
         self.db = db
+
+    def load_month(self, year, month):
+        pass
+
+    def load_stubs(self):
+        self.username2stub = self.db.all(STUBS)
 
     def find(self, log, rec):
         log("finding", rec['description'], end=' => ')
@@ -59,8 +64,9 @@ class Matcher(object):
         return self.db.all(FUZZ, rec)
 
     def hail_mary(self, log, rec):
+        # XXX I'm not sure this is ever hit!
         log("full of grace", rec['description'])
-        return self.db.one(HAIL_MARY, rec)
+        return self.username2stub.get(rec['description'])
 
 
 def process_month(matcher, cid2mat, uid2cid, year, month):
@@ -69,6 +75,8 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
     if not path.isfile(input_csv): return
     reader = csv.reader(open(input_csv))
     writer = csv.writer(open(match_csv, 'w+'))
+
+    matcher.load_month(year, month)
 
     headers = next(reader)
     rec2mat = {}
