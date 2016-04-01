@@ -5,8 +5,10 @@ import csv
 import datetime
 import os
 import sys
+from decimal import Decimal as D
 from os import path
 
+import psycopg2.tz
 from gratipay import wireup
 
 
@@ -35,6 +37,18 @@ FIND = FUZZ + """\
 
 """
 
+FULL = """\
+
+        SELECT e.*, p.id as user_id
+          FROM exchanges e
+          JOIN participants p
+            ON e.participant = p.username
+         WHERE substr("timestamp"::text, 0, 8) = %s
+           AND recorder IS NULL -- filter out PayPal
+      ORDER BY "timestamp" asc
+
+"""
+
 STUBS = """\
 
         SELECT username AS participant
@@ -44,20 +58,53 @@ STUBS = """\
 """
 
 
+def datetime_from_iso(iso):
+    date, time = iso.split('T')
+    assert time[-1] == 'Z'
+    time = time[:-1]
+    year, month, day = map(int, date.split('-'))
+    hour, minute, second_microsecond = time.split(':')
+    hour, minute = map(int, (hour, minute))
+    second, microsecond = map(int, second_microsecond.split('.'))
+    tz = psycopg2.tz.FixedOffsetTimezone(offset=0, name=None)
+    return datetime.datetime(year, month, day, hour, minute, second, microsecond, tzinfo=tz)
+
+
 class Matcher(object):
 
     def __init__(self, db):
         self.db = db
 
     def load_month(self, year, month):
-        pass
+        self.exchanges = self.db.all(FULL, ('{}-{}'.format(year, month),))
 
     def load_stubs(self):
         self.username2stub = self.db.all(STUBS)
 
     def find(self, log, rec):
         log("finding", rec['description'], end=' => ')
-        return self.db.one(FIND, rec)
+        for i in range(len(self.exchanges)):
+            e = self.exchanges[i]
+
+            # check username
+            if e.participant != rec['description']:
+                continue
+
+            # check amount
+            amount = D(rec['amount'])
+            if (e.amount > 0) and (e.amount + e.fee != amount):
+                continue
+            if (e.amount < 0) and (e.amount != amount):
+                continue
+
+            # check timestamp
+            delta = e.timestamp - datetime_from_iso(rec['created_at'])
+            threshold = datetime.timedelta(minutes=2)
+            if delta < threshold:
+                self.exchanges.pop(i)
+                return e  # got one!
+
+        return None
 
     def fuzz(self, log, rec):
         log("fuzzing", rec['description'], end='')
@@ -139,6 +186,7 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
                     print('missing ref!')
                 elif match.ref != rec['id']:
                     print('mismatched ref!')
+                    import pdb; pdb.set_trace()
                 elif match.status is None:
                     print('missing status!')
                 elif match.status != rec['status']:
