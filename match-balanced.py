@@ -98,7 +98,13 @@ class Matcher(object):
                 continue
 
             # check timestamp
-            delta = e.timestamp - datetime_from_iso(rec['created_at'])
+            timestamp = datetime_from_iso(rec['created_at'])
+            if e.timestamp < timestamp:
+                # the Balanced record always precedes the db record
+                continue
+
+            # keep checking timestamp
+            delta = e.timestamp - timestamp
             threshold = datetime.timedelta(minutes=2)
             if delta < threshold:
                 self.exchanges.pop(i)
@@ -186,12 +192,10 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
                     print('missing ref!')
                 elif match.ref != rec['id']:
                     print('mismatched ref!')
-                    import pdb; pdb.set_trace()
                 elif match.status is None:
                     print('missing status!')
                 elif match.status != rec['status']:
                     print('mismatched status!')
-
                 else:
                     ordered.pop()
                     print('all set!')
