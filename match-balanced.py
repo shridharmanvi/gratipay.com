@@ -118,6 +118,7 @@ class Matcher(object):
 
     def hail_mary(self, log, rec):
         # XXX I'm not sure this is ever hit!
+        raise NotImplementedError  # let's find out
         log("full of grace", rec['description'])
         return self.username2stub.get(rec['description'])
 
