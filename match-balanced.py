@@ -83,12 +83,24 @@ class Matcher(object):
 
     def find(self, log, rec):
         log("finding", rec['description'], end=' => ')
-        for i in range(len(self.exchanges)):
+        found = self._find(log, rec, relaxed=False)
+        return found[0] if found else None
+
+    def fuzz(self, log, rec):
+        log("fuzzing", rec['description'], end='')
+        return self._find(log, rec, relaxed=True)
+
+    def _find(self, log, rec, relaxed):
+        found = []
+        i = 0
+        while i < len(self.exchanges):
             e = self.exchanges[i]
+            i += 1
 
             # check username
-            if e.participant != rec['description']:
-                continue
+            if not relaxed:
+                if e.participant != rec['description']:
+                    continue
 
             # check amount
             amount = D(rec['amount'])
@@ -105,16 +117,19 @@ class Matcher(object):
 
             # keep checking timestamp
             delta = e.timestamp - timestamp
-            threshold = datetime.timedelta(minutes=2)
-            if delta < threshold:
+            threshold = datetime.timedelta(minutes=7)
+            if delta > threshold:
+                break
+
+            if not found:
                 self.exchanges.pop(i)
-                return e  # got one!
+                i -= 1
+            found.append(e)
 
-        return None
+            if not relaxed:
+                break
 
-    def fuzz(self, log, rec):
-        log("fuzzing", rec['description'], end='')
-        return self.db.all(FUZZ, rec)
+        return found
 
     def hail_mary(self, log, rec):
         # XXX I'm not sure this is ever hit!
