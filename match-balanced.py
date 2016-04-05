@@ -88,7 +88,9 @@ class Matcher(object):
 
     def fuzz(self, log, rec):
         log("fuzzing", rec['description'], end='')
-        return self._find(log, rec, relaxed=True)
+        fuzzed = self._find(log, rec, relaxed=True)
+        fuzzed.sort(key=lambda x: x.id)
+        return fuzzed
 
     def _find(self, log, rec, relaxed):
         found = []
@@ -122,8 +124,8 @@ class Matcher(object):
                 break
 
             if not found:
-                self.exchanges.pop(i)
                 i -= 1
+                self.exchanges.pop(i)
             found.append(e)
 
             if not relaxed:
