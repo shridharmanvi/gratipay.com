@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import sys
 import commands
 
 
@@ -8,16 +9,17 @@ def title(title):
     print(title)
     print("-"*34)
 
-def report(*patterns):
+def report(filename, *patterns):
     N = 0
     for pattern in patterns:
-        n = int(commands.getoutput('grep "{}" backfill.log | wc -l'.format(pattern)))
+        n = int(commands.getoutput('grep "{}" {} | wc -l'.format(pattern, filename)))
         N += n
         print("{:<28} {:>5}".format(pattern, n))
     print("{:<28} {:>5}".format('', N))
 
 
-report( 'IMPOSSIBLE!!!!!!!!!!!$'
+report( sys.argv[1] if len(sys.argv) > 1 else 'backfill.log'
+      , 'IMPOSSIBLE!!!!!!!!!!!$'
       , 'all set!$'
       , 'yes$'
       , 'no$'
