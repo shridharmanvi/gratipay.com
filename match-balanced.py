@@ -247,7 +247,6 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
         elif guess:
             print('(guessing) ', end='')
             match = {m.participant:m for m in possible}.get(guess.participant)
-            # XXX Why would we ever have a matched guess *and* "INSTEAD OF"?
 
         if match:
             print(match.participant)
