@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import csv
 import datetime
+import operator
 import os
 import sys
 from decimal import Decimal as D
@@ -308,11 +309,17 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
 def main(matcher, constraint):
     cid2mat = {}
     uid2cid = {}
+
+    op = operator.eq
+    if constraint[0] == '_':
+        constraint = constraint[1:]
+        op = operator.le
+
     for year in os.listdir('3912'):
         if not year.isdigit(): continue
         for month in os.listdir('3912/' + year):
             if not month.isdigit(): continue
-            if constraint and not '{}-{}'.format(year, month) == constraint: continue
+            if constraint and not op('{}-{}'.format(year, month), constraint): continue
             process_month(matcher, cid2mat, uid2cid, year, month)
 
 
