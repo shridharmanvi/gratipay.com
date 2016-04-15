@@ -13,31 +13,6 @@ import psycopg2.tz
 from gratipay import wireup
 
 
-FUZZ = """\
-
-        SELECT e.*, p.id as user_id
-          FROM exchanges e
-          JOIN participants p
-            ON e.participant = p.username
-         WHERE (
-                (("timestamp" - %(created_at)s) >= '0 minutes')
-                AND
-                (("timestamp" - %(created_at)s) < '7 minutes')
-               )
-           AND (
-                ((amount > 0) AND (amount + fee = %(amount)s))
-                OR
-                ((amount < 0) AND (amount = %(amount)s))
-               )
-           AND recorder IS NULL -- filter out PayPal
-
-"""
-FIND = FUZZ + """\
-
-           AND participant = %(description)s
-
-"""
-
 FULL = """\
 
         SELECT e.*, p.id as user_id
@@ -161,7 +136,6 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
     header("FINDING")
     for row in reader:
         rec = dict(zip(headers, row))
-        #rec = dict({unicode(k):v for k,v in dict(rec).items()})
 
         # special-case the first test transactions
         if rec['id'] in ('WD7qFYL9rqIrCUmbXsgJJ8HT', 'WD16Zqy9ISWN5muEhXo19vpn'):
