@@ -50,6 +50,8 @@ class Matcher(object):
 
     def __init__(self, db):
         self.db = db
+        self.cid2mat = {}
+        self.uid2cid = {}
 
     def load_month(self, year, month):
         self.exchanges = self.db.all(FULL, ('{}-{}'.format(year, month),))
@@ -116,7 +118,7 @@ class Matcher(object):
         return self.username2stub.get(rec['description'])
 
 
-def process_month(matcher, cid2mat, uid2cid, year, month):
+def process_month(matcher, year, month):
     input_csv = path.join('3912', year, month, '_balanced.csv')
     match_csv = path.join('3912', year, month, 'balanced')
     if not path.isfile(input_csv): return
@@ -168,12 +170,12 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
         match = matcher.find(log, rec)
         if match:
             uid = match.user_id
-            known = uid2cid.get(uid)
+            known = matcher.uid2cid.get(uid)
             if known:
                 assert cid == known, (rec, match)
             else:
-                uid2cid[uid] = cid
-                cid2mat[cid] = match
+                matcher.uid2cid[uid] = cid
+                matcher.cid2mat[cid] = match
             rec2mat[rec['id']] = match
 
             if match.route is not None:
@@ -201,10 +203,10 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
     header("FUZZING")
     for rec in inexact:
         cid = rec['links__customer']
-        guess = cid2mat.get(cid)
+        guess = matcher.cid2mat.get(cid)
 
         fuzzed = matcher.fuzz(log, rec)
-        keep = lambda m: (not m.user_id in uid2cid) or (guess and m.user_id == guess.user_id)
+        keep = lambda m: (not m.user_id in matcher.uid2cid) or (guess and m.user_id == guess.user_id)
         possible = [m for m in fuzzed if keep(m)]
         npossible = len(possible)
         print(' => ', end='')
@@ -214,10 +216,10 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
             print('???', rec['amount'], end='')  # should log "skipping" below
         elif npossible == 1:
             match = possible[0]
-            if cid in cid2mat:
+            if cid in matcher.cid2mat:
                 print('(again) ', end='')
             else:
-                cid2mat[cid] = match
+                matcher.cid2mat[cid] = match
         elif guess:
             print('(guessing) ', end='')
             match = {m.participant:m for m in possible}.get(guess.participant)
@@ -245,7 +247,7 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
                     mindelta = delta
                     match = p
 
-            cid2mat[cid] = match
+            matcher.cid2mat[cid] = match
             possible.remove(match)
             print(match.participant, 'INSTEAD OF', ' OR '.join([p.participant for p in possible]))
 
@@ -257,7 +259,7 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
         match = rec2mat.get(rec['id'])
         if match is None:
             assert rec['status'] == 'failed', rec['id']
-            match = cid2mat.get(cid)  # *any* successful exchanges for this user?
+            match = matcher.cid2mat.get(cid)  # *any* successful exchanges for this user?
             if not match:
                 match = matcher.hail_mary(log, rec)
             writer.writerow([ match.participant
@@ -282,9 +284,6 @@ def process_month(matcher, cid2mat, uid2cid, year, month):
 
 
 def main(matcher, constraint):
-    cid2mat = {}
-    uid2cid = {}
-
     op = operator.eq
     if constraint and constraint[0] == '_':
         constraint = constraint[1:]
@@ -295,7 +294,7 @@ def main(matcher, constraint):
         for month in os.listdir('3912/' + year):
             if not month.isdigit(): continue
             if constraint and not op('{}-{}'.format(year, month), constraint): continue
-            process_month(matcher, cid2mat, uid2cid, year, month)
+            process_month(matcher, year, month)
 
 
 if __name__ == '__main__':
