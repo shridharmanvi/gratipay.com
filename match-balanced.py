@@ -286,7 +286,7 @@ def main(matcher, constraint):
     uid2cid = {}
 
     op = operator.eq
-    if constraint[0] == '_':
+    if constraint and constraint[0] == '_':
         constraint = constraint[1:]
         op = operator.le
 
