@@ -13,6 +13,9 @@ import psycopg2.tz
 from gratipay import wireup
 
 
+header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
+
+
 FULL = """\
 
         SELECT e.*, p.id as user_id
@@ -132,8 +135,6 @@ def process_month(matcher, year, month):
     inexact = []
     ordered = []
     failed = set()
-
-    header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
 
     header("FINDING")
     for row in reader:
