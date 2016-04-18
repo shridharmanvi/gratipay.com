@@ -114,12 +114,6 @@ class Matcher(object):
 
         return found
 
-    def hail_mary(self, log, rec):
-        # XXX I'm not sure this is ever hit!
-        raise NotImplementedError  # let's find out
-        log("full of grace", rec['description'])
-        return self.username2stub.get(rec['description'])
-
 
 def process_month(matcher, year, month):
     input_csv = path.join('3912', year, month, '_balanced.csv')
@@ -261,8 +255,7 @@ def process_month(matcher, year, month):
         if match is None:
             assert rec['status'] == 'failed', rec['id']
             match = matcher.cid2mat.get(cid)  # *any* successful exchanges for this user?
-            if not match:
-                match = matcher.hail_mary(log, rec)
+            assert match is not None
             writer.writerow([ match.participant
                             , match.user_id
                             , rec['links__customer']
