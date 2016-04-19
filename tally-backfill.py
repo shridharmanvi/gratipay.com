@@ -20,6 +20,7 @@ def report(filename, *patterns):
 
 report( sys.argv[1] if len(sys.argv) > 1 else 'backfill.log'
       , 'IMPOSSIBLE!!!!!!!!!!!$'
+      , 'Eep! Guess failed!$'
       , 'all set!$'
       , 'yes$'
       , 'no$'
@@ -29,5 +30,4 @@ report( sys.argv[1] if len(sys.argv) > 1 else 'backfill.log'
       , 'mismatched ref!$'
       , 'missing status!$'
       , 'mismatched status!$'
-      , 'full of grace'
        )

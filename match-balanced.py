@@ -53,7 +53,7 @@ class Matcher(object):
 
     def __init__(self, db):
         self.db = db
-        self.cid2mat = {}
+        self.cid2uid = {}
         self.uid2cid = {}
 
     def load_month(self, year, month):
@@ -62,38 +62,43 @@ class Matcher(object):
     def load_stubs(self):
         self.username2stub = self.db.all(STUBS)
 
-    def find(self, log, rec):
-        log("finding", rec['description'], end=' => ')
-        found = self._find(log, rec, relaxed=False)
+    def find(self, log, timestamp, amount, username):
+        log("finding", username, end=' => ')
+        found = self._find(log, timestamp, amount, uid=None, username=username)
         return found[0] if found else None
 
-    def fuzz(self, log, rec):
-        log("fuzzing", rec['description'], end='')
-        fuzzed = self._find(log, rec, relaxed=True)
+    def fuzz(self, log, timestamp, amount, uid, username):
+        log("fuzzing", username, end='')
+        fuzzed = self._find(log, timestamp, amount, uid=uid, username=username)
         fuzzed.sort(key=lambda x: x.id)
         return fuzzed
 
-    def _find(self, log, rec, relaxed):
+    def _find(self, log, timestamp, amount, uid, username):
         found = []
         i = 0
+        timestamp = datetime_from_iso(timestamp)
         while i < len(self.exchanges):
             e = self.exchanges[i]
             i += 1
 
+            # check uid
+            if uid and e.user_id != uid:
+                continue
+            if uid is None and e.user_id in self.uid2cid:
+                continue
+
             # check username
-            if not relaxed:
-                if e.participant != rec['description']:
-                    continue
+            if username and e.participant != username:
+                continue
 
             # check amount
-            amount = D(rec['amount'])
+            amount = D(amount)
             if (e.amount > 0) and (e.amount + e.fee != amount):
                 continue
             if (e.amount < 0) and (e.amount != amount):
                 continue
 
             # check timestamp
-            timestamp = datetime_from_iso(rec['created_at'])
             if e.timestamp < timestamp:
                 # the Balanced record always precedes the db record
                 continue
@@ -109,7 +114,7 @@ class Matcher(object):
                 self.exchanges.pop(i)
             found.append(e)
 
-            if not relaxed:
+            if uid:
                 break
 
         return found
@@ -162,7 +167,7 @@ def process_month(matcher, year, month):
         cid = rec['links__customer']
         ordered.append(rec)
 
-        match = matcher.find(log, rec)
+        match = matcher.find(log, rec['created_at'], rec['amount'], rec['description'])
         if match:
             uid = match.user_id
             known = matcher.uid2cid.get(uid)
@@ -170,7 +175,7 @@ def process_month(matcher, year, month):
                 assert cid == known, (rec, match)
             else:
                 matcher.uid2cid[uid] = cid
-                matcher.cid2mat[cid] = match
+                matcher.cid2uid[cid] = uid
             rec2mat[rec['id']] = match
 
             if match.route is not None:
@@ -198,33 +203,27 @@ def process_month(matcher, year, month):
     header("FUZZING")
     for rec in inexact:
         cid = rec['links__customer']
-        guess = matcher.cid2mat.get(cid)
-
-        fuzzed = matcher.fuzz(log, rec)
-        keep = lambda m: (not m.user_id in matcher.uid2cid) or (guess and m.user_id == guess.user_id)
-        possible = [m for m in fuzzed if keep(m)]
+        rid = rec['id']
+        guess = matcher.cid2uid.get(cid)
+        possible = matcher.fuzz(log, rec['created_at'], rec['amount'], guess, rec['description'])
         npossible = len(possible)
+
+        def fail(msg):
+            print(msg)
+            failed.add(rid)
+
         print(' => ', end='')
 
-        match = None
-        if npossible == 0:
-            print('???', rec['amount'], end='')  # should log "skipping" below
-        elif npossible == 1:
-            match = possible[0]
-            if cid in matcher.cid2mat:
-                print('(again) ', end='')
+        if guess:
+            if npossible == 0:
+                fail('Eep! Guess failed!')
+            elif npossible > 1:
+                fail('What?! Too many!')
             else:
-                matcher.cid2mat[cid] = match
-        elif guess:
-            print('(guessing) ', end='')
-            match = {m.participant:m for m in possible}.get(guess.participant)
-
-        if match:
-            print(match.participant)
+                match = possible[0]
+                print(match.participant)
         elif not possible:
-            print(' ... IMPOSSIBLE!!!!!!!!!!!')
-            failed.add(rec['id'])
-            continue
+            fail(' ... IMPOSSIBLE!!!!!!!!!!!')
         else:
             mindelta = None
 
@@ -242,11 +241,14 @@ def process_month(matcher, year, month):
                     mindelta = delta
                     match = p
 
-            matcher.cid2mat[cid] = match
+            matcher.cid2uid[cid] = match.user_id
             possible.remove(match)
             print(match.participant, 'INSTEAD OF', ' OR '.join([p.participant for p in possible]))
 
-        rec2mat[rec['id']] = match
+        if rid in failed:
+            continue
+
+        rec2mat[rid] = match
 
     header("WRITING")
     for rec in ordered:
@@ -254,8 +256,6 @@ def process_month(matcher, year, month):
         match = rec2mat.get(rec['id'])
         if match is None:
             assert rec['status'] == 'failed', rec['id']
-            match = matcher.cid2mat.get(cid)  # *any* successful exchanges for this user?
-            assert match is not None
             writer.writerow([ match.participant
                             , match.user_id
                             , rec['links__customer']
