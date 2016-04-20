@@ -41,70 +41,6 @@ def datetime_from_iso(iso):
     return datetime.datetime(year, month, day, hour, minute, second, microsecond, tzinfo=tz)
 
 
-class Matcher(object):
-
-    def __init__(self, db):
-        self.cid2uid = {}
-        self.uid2cid = {}
-
-    def find(self, log, timestamp, amount, username):
-        log("finding", username, end=' => ')
-        found = self._find(log, timestamp, amount, uid=None, username=username)
-        return found[0] if found else None
-
-    def fuzz(self, log, timestamp, amount, uid, username):
-        log("fuzzing", username, end='')
-        fuzzed = self._find(log, timestamp, amount, uid=uid, username=username)
-        fuzzed.sort(key=lambda x: x.id)
-        return fuzzed
-
-    def _find(self, log, timestamp, amount, uid, username):
-        found = []
-        i = 0
-        timestamp = datetime_from_iso(timestamp)
-        while i < len(self.exchanges):
-            e = self.exchanges[i]
-            i += 1
-
-            # check uid
-            if uid and e.user_id != uid:
-                continue
-            if uid is None and e.user_id in self.uid2cid:
-                continue
-
-            # check username
-            if username and e.participant != username:
-                continue
-
-            # check amount
-            amount = D(amount)
-            if (e.amount > 0) and (e.amount + e.fee != amount):
-                continue
-            if (e.amount < 0) and (e.amount != amount):
-                continue
-
-            # check timestamp
-            if e.timestamp < timestamp:
-                # the Balanced record always precedes the db record
-                continue
-
-            # keep checking timestamp
-            delta = e.timestamp - timestamp
-            threshold = datetime.timedelta(minutes=7)
-            if delta > threshold:
-                break
-
-            if not found:
-                i -= 1
-                self.exchanges.pop(i)
-            found.append(e)
-
-            if uid:
-                break
-
-        return found
-
-
 def process_month(matcher, year, month):
     input_csv = path.join('3912', year, month, '_balanced.csv')
     match_csv = path.join('3912', year, month, 'balanced')
@@ -299,50 +235,57 @@ def get_transactions(root):
 
     # may not be necessary, but just to be sure ...
     transactions.sort(key=lambda rec: rec['created_at'])
-    transactions.reverse()
 
     return transactions
 
 
-def first_pass(gratipay_exchanges, balanced_transactions):
-    """Remove matches from _exchanges and _transactions and return a list of
-    (exchange, transaction) match tuples
-    """
-    for exchange in gratipay_exchanges:
-        pass
+class Matcher(object):
 
-    return []
+    def __init__(self, db, root):
+        self.transactions = get_transactions(root)
+        self.exchanges = get_exchanges(db)
 
+        print("We have {} transactions to match!".format(len(self.transactions)))
+        print("We have {} exchanges to match!".format(len(self.exchanges)))
 
-def main(db, root):
-
-    # Load two lists, exchanges and transactions, both sorted by timestamp
-    # ascending.
-
-    gratipay_exchanges = get_exchanges(db)
-    balanced_transactions = get_transactions(root)
-
-    print("We have {} exchanges to match!".format(len(gratipay_exchanges)))
-    print("We have {} transactions to match!".format(len(balanced_transactions)))
+        self.cid2uid = {}
+        self.uid2cid = {}
 
 
-    # Loop through exchanges and match any transactions that we can do so
-    # definitively: username and amount match exactly, and timestamp is within
-    # NN seconds (XXX after, right?).
+    def main(self):
+        passes = [self.first_pass]
+        matches = []
+        for pass_ in passes:
+            matches.extend(pass_())
+        print("We found {} matches!".format(len(matches)))
 
-    passes = [first_pass]
 
-    matches = []
-    for pass_ in passes:
-        matches.extend(pass_(gratipay_exchanges, balanced_transactions))
+    def loop_over_exchanges(self, start, seconds):
+        timestamp = datetime_from_iso(start)
+        limit = timestamp + datetime.timedelta(seconds=seconds)
+        for exchange in self.exchanges:
+            if exchange.timestamp > limit:
+                break
+            yield exchange
 
-    print("We found {} matches!".format(len(matches)))
+
+    def first_pass(self):
+        """Remove matches from _exchanges and _transactions and return a list of
+        (exchange, transaction) match tuples
+        """
+        for i, transaction in enumerate(self.transactions):
+            if i % 1000 == 0:
+                print('.', end='')
+            for exchange in self.loop_over_exchanges(transaction['created_at'], 10):
+                continue
+        return []
 
 
 if __name__ == '__main__':
     _db = wireup.db(wireup.env())
     _root = os.path.abspath('3912')
-    main(_db, _root)
+    matcher = Matcher(_db, _root)
+    matcher.main()
 
 
 """
