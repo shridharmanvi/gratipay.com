@@ -248,16 +248,16 @@ class Matcher(object):
         print("We have {} transactions to match!".format(len(self.transactions)))
         print("We have {} exchanges to match!".format(len(self.exchanges)))
 
+        self.matches = []
         self.cid2uid = {}
         self.uid2cid = {}
 
 
     def main(self):
         passes = [self.first_pass]
-        matches = []
         for pass_ in passes:
-            matches.extend(pass_())
-        print("We found {} matches!".format(len(matches)))
+            pass_()
+        print("We found {} matches!".format(len(self.matches)))
 
 
     def loop_over_exchanges(self, start, seconds):
@@ -277,15 +277,43 @@ class Matcher(object):
             if i % 1000 == 0:
                 print('.', end='')
             for exchange in self.loop_over_exchanges(transaction['created_at'], 10):
-                continue
-        return []
+
+                # match amount
+                amount = D(transaction['amount'])
+                if (exchange.amount > 0) and (exchange.amount + exchange.fee != amount):
+                    continue
+                if (exchange.amount < 0) and (exchange.amount != amount):
+                    continue
+
+                # match username
+                if transaction['description'] != exchange.participant:
+                    continue
+
+                self.matches.append((transaction, exchange))
+
+
+    def dump(self):
+        out = csv.writer(open('balanced', 'w+'))
+        for transaction, exchange in self.matches:
+            out.writerow(( exchange.participant
+                         , exchange.user_id
+                         , transaction['links__customer']
+                         , exchange.id
+                         , exchange.amount
+                         , transaction['id']
+                         , transaction['status']
+                          ))
 
 
 if __name__ == '__main__':
     _db = wireup.db(wireup.env())
     _root = os.path.abspath('3912')
     matcher = Matcher(_db, _root)
-    matcher.main()
+    try:
+        matcher.main()
+    except KeyboardInterrupt:
+        pass
+    matcher.dump()
 
 
 """
