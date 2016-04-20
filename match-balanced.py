@@ -28,14 +28,6 @@ FULL = """\
 
 """
 
-STUBS = """\
-
-        SELECT username AS participant
-             , id AS user_id
-          FROM participants
-
-"""
-
 
 def datetime_from_iso(iso):
     date, time = iso.split('T')
@@ -52,12 +44,8 @@ def datetime_from_iso(iso):
 class Matcher(object):
 
     def __init__(self, db):
-        self.db = db
         self.cid2uid = {}
         self.uid2cid = {}
-
-    def load_month(self, year, month):
-        self.exchanges = self.db.all(FULL, ('{}-{}'.format(year, month),))
 
     def find(self, log, timestamp, amount, username):
         log("finding", username, end=' => ')
@@ -135,29 +123,6 @@ def process_month(matcher, year, month):
     header("FINDING")
     for row in reader:
         rec = dict(zip(headers, row))
-
-        # special-case the first test transactions
-        if rec['id'] in ('WD7qFYL9rqIrCUmbXsgJJ8HT', 'WD16Zqy9ISWN5muEhXo19vpn'):
-            continue
-
-        # convert cents to dollars
-        rec['amount'] = '{}.{}'.format(rec['amount'][:-2], rec['amount'][-2:])
-        if rec['amount'].startswith('.'):
-            rec['amount'] = '0' + rec['amount']
-
-        # check status
-        if not rec['status'] in ('succeeded', 'failed'):
-            raise Exception(rec)
-
-        # check kind
-        if rec['kind'] == 'card_hold':
-            continue    # we never tracked these in the Gratipay db
-        elif rec['kind'] in ('credit', 'refund'):
-            rec['amount'] = '-' + rec['amount']
-        elif rec['kind'] in ('debit', 'reversal'):
-            pass
-        else:
-            raise Exception(rec)
 
         log = lambda *a, **kw: print(rec['created_at'], *a, **kw)
 
@@ -274,29 +239,114 @@ def process_month(matcher, year, month):
                              ])
 
 
-def main(matcher, constraint):
-    op = operator.eq
-    if constraint and constraint[0] == '_':
-        constraint = constraint[1:]
-        op = operator.le
+### OLD ^^^^^^^^^^^^^^^^^^
+### NEW vvvvvvvvvvvvvvvvvv
 
-    for year in os.listdir('3912'):
-        if not year.isdigit(): continue
-        for month in os.listdir('3912/' + year):
-            if not month.isdigit(): continue
-            if constraint and not op('{}-{}'.format(year, month), constraint): continue
-            process_month(matcher, year, month)
+
+def get_exchanges(db):
+    return db.all("""\
+
+        SELECT e.*, p.id as user_id
+          FROM exchanges e
+          JOIN participants p
+            ON e.participant = p.username
+         WHERE recorder IS NULL -- filter out PayPal
+      ORDER BY "timestamp" asc
+
+    """)
+
+
+def get_transactions(root):
+    transactions = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        for filename in filenames:
+            if filename != '_balanced.csv':
+                continue
+            fp = open(os.path.join(dirpath, filename))
+            reader = csv.reader(fp)
+            headers = reader.next()
+            for row in reader:
+                rec = dict(zip(headers, row))
+
+                # special-case the first test transactions
+                if rec['id'] in ('WD7qFYL9rqIrCUmbXsgJJ8HT', 'WD16Zqy9ISWN5muEhXo19vpn'):
+                    continue
+
+                # special-case escrow shuffles to/from Gratipay
+                if rec['links__customer'] == 'AC13kr5rmbUkMJWbocmNs3tD':
+                    continue
+
+                # convert cents to dollars
+                rec['amount'] = '{}.{}'.format(rec['amount'][:-2], rec['amount'][-2:])
+                if rec['amount'].startswith('.'):
+                    rec['amount'] = '0' + rec['amount']
+
+                # check status
+                if not rec['status'] in ('succeeded', 'failed'):
+                    raise Exception(rec)
+
+                # check kind
+                if rec['kind'] == 'card_hold':
+                    continue    # we never tracked these in the Gratipay db
+                elif rec['kind'] in ('credit', 'refund'):
+                    rec['amount'] = '-' + rec['amount']
+                elif rec['kind'] in ('debit', 'reversal'):
+                    pass
+                else:
+                    raise Exception(rec)
+
+                transactions.append(rec)
+
+    # may not be necessary, but just to be sure ...
+    transactions.sort(key=lambda rec: rec['created_at'])
+    transactions.reverse()
+
+    return transactions
+
+
+def first_pass(gratipay_exchanges, balanced_transactions):
+    """Remove matches from _exchanges and _transactions and return a list of
+    (exchange, transaction) match tuples
+    """
+    for exchange in gratipay_exchanges:
+        pass
+
+    return []
+
+
+def main(db, root):
+
+    # Load two lists, exchanges and transactions, both sorted by timestamp
+    # ascending.
+
+    gratipay_exchanges = get_exchanges(db)
+    balanced_transactions = get_transactions(root)
+
+    print("We have {} exchanges to match!".format(len(gratipay_exchanges)))
+    print("We have {} transactions to match!".format(len(balanced_transactions)))
+
+
+    # Loop through exchanges and match any transactions that we can do so
+    # definitively: username and amount match exactly, and timestamp is within
+    # NN seconds (XXX after, right?).
+
+    passes = [first_pass]
+
+    matches = []
+    for pass_ in passes:
+        matches.extend(pass_(gratipay_exchanges, balanced_transactions))
+
+    print("We found {} matches!".format(len(matches)))
 
 
 if __name__ == '__main__':
     _db = wireup.db(wireup.env())
-    _matcher = Matcher(_db)
-    _constraint = '' if len(sys.argv) < 2 else sys.argv[1]
-    main(_matcher, _constraint)
+    _root = os.path.abspath('3912')
+    main(_db, _root)
 
 
 """
-Fields in balanced.dat:
+Fields in balanced.csv:
 
     id
     kind
