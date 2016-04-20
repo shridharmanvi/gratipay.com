@@ -59,9 +59,6 @@ class Matcher(object):
     def load_month(self, year, month):
         self.exchanges = self.db.all(FULL, ('{}-{}'.format(year, month),))
 
-    def load_stubs(self):
-        self.username2stub = self.db.all(STUBS)
-
     def find(self, log, timestamp, amount, username):
         log("finding", username, end=' => ')
         found = self._find(log, timestamp, amount, uid=None, username=username)
