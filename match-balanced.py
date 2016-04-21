@@ -401,6 +401,7 @@ class Matcher(object):
         """
         h = done = self.I = self.J = self.K = 0
         start = time.time()
+        N_initial = len(self.transactions)
         while not done:
 
             # output a progress report
@@ -408,8 +409,12 @@ class Matcher(object):
             if h % 10 == 0:
                 N = len(self.transactions)
                 M = len(self.exchanges)
-                perc = self.I / N
-                remaining = int((time.time() - start) / (perc or 0.001))
+                perc = (N_initial - N) / N_initial
+
+                elapsed = time.time() - start
+                total = elapsed / (perc or 0.001)
+                remaining = total - elapsed
+
                 if remaining > 24*60*60:
                     remaining = '{:.1f} d'.format(remaining / 60 / 60 / 24)
                 elif remaining > 60*60:
@@ -418,10 +423,12 @@ class Matcher(object):
                     remaining = '{:.1f} m'.format(remaining / 60)
                 else:
                     remaining = '{} s'.format(remaining)
-                print('\r{:>5} / {:>5} = {:4.1f}% | {:>5} / {:>5} = {:4.1f}% | {} matches | T-{}'
-                      .format( self.I, N, perc * 100
-                             , self.J, M, (self.J / M) * 100
+
+                print('\r{:>5} / {:>5} | {:>5} / {:>5} | {} matches | {:4.1f}% | T-{:<20}'
+                      .format( self.I, N
+                             , self.J, M
                              , len(self.matches)
+                             , perc * 100
                              , remaining
                               ), end='')
 
