@@ -422,7 +422,7 @@ class Matcher(object):
                 elif remaining > 60:
                     remaining = '{:.1f} m'.format(remaining / 60)
                 else:
-                    remaining = '{} s'.format(remaining)
+                    remaining = '{} s'.format(int(remaining))
 
                 print('\r{:>5} / {:>5} | {:>5} / {:>5} | {} matches | {:4.1f}% | T-{:<20}'
                       .format( self.I, N
@@ -457,7 +457,7 @@ class Matcher(object):
             J = self.J + 1
 
             # Check for the end of the list.
-            if J > len(self.exchanges):
+            if J == len(self.exchanges):
                 raise Heck
 
             # Check for 10+ seconds beyond the transaction.
@@ -470,7 +470,7 @@ class Matcher(object):
             J = self.K
 
             # Check for the end of the list.
-            if I > len(self.transactions):
+            if I == len(self.transactions):
                 return True
 
             # Reset J.
@@ -513,7 +513,7 @@ if __name__ == '__main__':
 
     try:
         matcher.main()
-    except KeyboardInterrupt:
+    except:
         pass
 
     print("\nWe found {} matches!".format(len(matcher.matches)))
