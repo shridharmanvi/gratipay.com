@@ -153,7 +153,7 @@ class Matcher(object):
         self.exchanges = get_exchanges(db)
         print("we have {} exchanges to match!".format(len(self.exchanges)))
 
-        self.uncategorized = {'transactions': [], 'exchanges': []}
+        self.unmatchable = {'transactions': [], 'exchanges': []}
 
 
         # Do goofiness to map cid to transactions
@@ -171,22 +171,22 @@ class Matcher(object):
 
             if t['status'] == 'failed' and t['created_at'] < '2014-12-18':
                 # We didn't record failures before this date.
-                self.uncategorized['transactions'].append(t)
+                self.unmatchable['transactions'].append(t)
                 continue
 
             if not cid:
                 if t['kind'] != 'card_hold' or t['links__debit'] != '':
-                    self.uncategorized['transactions'].append(t)
+                    self.unmatchable['transactions'].append(t)
                     continue
                 usernames = card2usernames[t['links__card']]
                 cids = set.union(*[username2cids[username] for username in usernames])
                 if len(cids) != 1:
-                    self.uncategorized['transactions'].append(t)
+                    self.unmatchable['transactions'].append(t)
                     continue
                 cid = tuple(cids)[0]
 
             if not cid:
-                self.uncategorized['transactions'].append(t)
+                self.unmatchable['transactions'].append(t)
                 continue
 
             self.cid2transactions[cid].append(t)
@@ -255,8 +255,8 @@ class Matcher(object):
 
                     break
 
-        self.uncategorized['transactions'] += [t for t in transactions if t['id'] not in matched_t]
-        self.uncategorized['exchanges'] += [e for e in exchanges if e.id not in matched_e]
+        self.unmatchable['transactions'] += [t for t in transactions if t['id'] not in matched_t]
+        self.unmatchable['exchanges'] += [e for e in exchanges if e.id not in matched_e]
 
 
     def main(self):
@@ -359,13 +359,13 @@ class Matcher(object):
                          , transaction['status']
                           ))
 
-        out = csv.writer(open('uncategorized.exchanges', 'w+'))
-        for exchange in self.uncategorized['exchanges']:
+        out = csv.writer(open('unmatchable.exchanges', 'w+'))
+        for exchange in self.unmatchable['exchanges']:
             rec = [x[1] for x in exchange._asdict().items()]
             out.writerow(rec)
 
-        out = csv.writer(open('uncategorized.transactions', 'w+'))
-        for transaction in self.uncategorized['transactions']:
+        out = csv.writer(open('unmatchable.transactions', 'w+'))
+        for transaction in self.unmatchable['transactions']:
             rec = [x[1] for x in sorted(transaction.items())]
             out.writerow(rec)
 
