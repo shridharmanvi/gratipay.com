@@ -153,7 +153,7 @@ class Matcher(object):
         self.exchanges = get_exchanges(db)
         print("we have {} exchanges to match!".format(len(self.exchanges)))
 
-        self.unmatchable = {'transactions': [], 'exchanges': []}
+        self.unmatchable = defaultdict(list)
 
 
         # Do goofiness to map cid to transactions
@@ -171,22 +171,33 @@ class Matcher(object):
 
             if t['status'] == 'failed' and t['created_at'] < '2014-12-18':
                 # We didn't record failures before this date.
-                self.unmatchable['transactions'].append(t)
+                self.unmatchable['early_failures'].append(t)
                 continue
 
             if not cid:
-                if t['kind'] != 'card_hold' or t['links__debit'] != '':
-                    self.unmatchable['transactions'].append(t)
+                # It seems that card holds don't have a customer link.
+                if t['kind'] != 'card_hold':
+                    self.unmatchable['non_card_hold_without_cid'].append(t)
                     continue
+                if t['links__debit'] != '':
+                    # Though if the card hold is linked to a debit, then we'll pass here
+                    # and just work with the debit (when we get to it) instead.
+                    continue
+                if not t['links__card']:
+                    # Okay: but the card hold *should* have a card.
+                    self.unmatchable['card_hold_without_card'].append(t)
+                    continue
+
+                # Can we unambiguously determine a cid from the card?
                 usernames = card2usernames[t['links__card']]
                 cids = set.union(*[username2cids[username] for username in usernames])
                 if len(cids) != 1:
-                    self.unmatchable['transactions'].append(t)
+                    self.unmatchable['ambiguous_card_hold'].append(t)
                     continue
                 cid = tuple(cids)[0]
 
             if not cid:
-                self.unmatchable['transactions'].append(t)
+                self.unmatchable['still_no_cid'].append(t)
                 continue
 
             self.cid2transactions[cid].append(t)
@@ -255,7 +266,7 @@ class Matcher(object):
 
                     break
 
-        self.unmatchable['transactions'] += [t for t in transactions if t['id'] not in matched_t]
+        self.unmatchable['dregs'] += [t for t in transactions if t['id'] not in matched_t]
         self.unmatchable['exchanges'] += [e for e in exchanges if e.id not in matched_e]
 
 
@@ -359,15 +370,11 @@ class Matcher(object):
                          , transaction['status']
                           ))
 
-        out = csv.writer(open('unmatchable.exchanges', 'w+'))
-        for exchange in self.unmatchable['exchanges']:
-            rec = [x[1] for x in exchange._asdict().items()]
-            out.writerow(rec)
-
-        out = csv.writer(open('unmatchable.transactions', 'w+'))
-        for transaction in self.unmatchable['transactions']:
-            rec = [x[1] for x in sorted(transaction.items())]
-            out.writerow(rec)
+        for reason in self.unmatchable:
+            out = csv.writer(open('unmatchable.{}'.format(reason), 'w+'))
+            flatten = lambda o: o._asdict().items() if reason == 'exchanges' else sorted(o.items())
+            for rec in self.unmatchable[reason]:
+                out.writerow([kv[1] for kv in flatten(rec)])
 
 
 if __name__ == '__main__':
