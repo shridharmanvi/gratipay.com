@@ -368,6 +368,7 @@ class Matcher(object):
                          , exchange.amount
                          , transaction['id']
                          , transaction['status']
+                         , transaction['kind']
                           ))
 
         for reason in self.unmatchable:
@@ -385,10 +386,16 @@ if __name__ == '__main__':
     try:
         matcher.main()
     except:
-        pass
+        ask_before_dumping = True
+    else:
+        ask_before_dumping = False
 
     print("\nWe found {} matches!".format(len(matcher.matches)))
-    matcher.dump()
+    if ask_before_dumping:
+        if raw_input("Dump data so far? (y/N) ") == 'y':
+            matcher.dump()
+    else:
+        matcher.dump()
 
 
 """
