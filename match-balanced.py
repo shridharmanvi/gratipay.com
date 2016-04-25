@@ -16,6 +16,7 @@ header = lambda h: print(h.upper() + ' ' + ((80 - len(h) - 1) * '-'))
 
 
 class Heck(Exception): pass
+SIXTY_SECONDS = datetime.timedelta(seconds=60)
 
 
 def datetime_from_iso(iso):
@@ -241,30 +242,43 @@ class Matcher(object):
 
         for t in transactions:
             if t['id'] in matched_t: continue
+            timelimit = t['timestamp'] - SIXTY_SECONDS
             for e in exchanges:
                 if e.id in matched_e: continue
-                if e.timestamp < t['timestamp']: continue
-                if amounts_match(t, e) and ts_within(t, e, 6*3600):
-                    matched_t.add(t['id'])
-                    matched_e.add(e.id)
-                    self.matches.append((t, e))
+                if e.timestamp < timelimit or not ts_within(t, e, 6*3600): continue
+                if not amounts_match(t, e):
 
-                    if 0:
-                        # XXX Bring me back!
-                        if e.ref is None and e.status is None:
-                            print('missing ref and status!')
-                        elif e.ref != t['id'] and e.status != t['status']:
-                            print('mismatched ref and status!')
-                        elif e.ref is None:
-                            print('missing ref!')
-                        elif e.ref != t['id']:
-                            print('mismatched ref!')
-                        elif e.status is None:
-                            print('missing status!')
-                        elif e.status != t['status']:
-                            print('mismatched status!')
+                    # We appear to have recorded the nominal amount of the tip
+                    # for failed exchanges, not the charge amount. I guess
+                    # let's link these on the strength of the cid/uid and
+                    # timestamp match?
 
-                    break
+                    if t['status'] == 'failed':
+                        if e.amount > t['amount']:
+                            continue
+                    else:
+                        continue
+
+                matched_t.add(t['id'])
+                matched_e.add(e.id)
+                self.matches.append((t, e))
+
+                if 0:
+                    # XXX Bring me back!
+                    if e.ref is None and e.status is None:
+                        print('missing ref and status!')
+                    elif e.ref != t['id'] and e.status != t['status']:
+                        print('mismatched ref and status!')
+                    elif e.ref is None:
+                        print('missing ref!')
+                    elif e.ref != t['id']:
+                        print('mismatched ref!')
+                    elif e.status is None:
+                        print('missing status!')
+                    elif e.status != t['status']:
+                        print('mismatched status!')
+
+                break
 
         self.unmatchable['dregs'] += [t for t in transactions if t['id'] not in matched_t]
         self.unmatchable['exchanges'] += [e for e in exchanges if e.id not in matched_e]
