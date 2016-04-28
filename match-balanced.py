@@ -55,12 +55,14 @@ def ts_within(transaction, exchange, seconds):
 def get_exchanges(db):
     return db.all("""\
 
-        SELECT e.*, p.id as user_id
-          FROM exchanges e
-          JOIN participants p
-            ON e.participant = p.username
-         WHERE recorder IS NULL -- filter out PayPal
-      ORDER BY "timestamp" asc
+            SELECT e.*, p.id as user_id, r.network as network
+              FROM exchanges e
+              JOIN participants p
+                ON e.participant = p.username
+   LEFT OUTER JOIN exchange_routes r
+                ON e.route = r.id
+             WHERE recorder IS NULL -- filter out PayPal
+          ORDER BY "timestamp" asc
 
     """)
 
@@ -243,9 +245,18 @@ class Matcher(object):
         for t in transactions:
             if t['id'] in matched_t: continue
             timelimit = t['timestamp'] - SIXTY_SECONDS
-            for e in exchanges:
-                if e.id in matched_e: continue
-                if e.timestamp < timelimit or not ts_within(t, e, 6*3600): continue
+            i = 0
+            while i < len(exchanges):
+                e = exchanges[i]
+                assert not e.id in matched_e
+
+                # Fast-forward to an exchange that is within a certain time
+                # tolerance of the current transaction.
+                if e.timestamp < timelimit or not ts_within(t, e, 6*3600):
+                    i += 1
+                    continue
+
+                # See if the amounts match.
                 if not amounts_match(t, e):
 
                     # We appear to have recorded the nominal amount of the tip
@@ -255,15 +266,24 @@ class Matcher(object):
 
                     if t['status'] == 'failed':
                         if e.amount > t['amount']:
+                            self.unmatchable['exchanges.bad-amount-failed'].append(e)
+                            exchanges.remove(e)
                             continue
                     else:
+                        self.unmatchable['exchanges.bad-amount-succeeded'].append(e)
+                        exchanges.remove(e)
                         continue
 
+                exchanges.remove(e)
                 matched_t.add(t['id'])
                 matched_e.add(e.id)
                 self.matches.append((t, e))
 
                 if 0:
+                    if e.network not in ('balanced-cc', 'balanced-ba', None):
+                        self.unmatchable['exchanges.bad-network'].append(e)
+                        exchanges.remove(e)
+                        continue
                     # XXX Bring me back!
                     if e.ref is None and e.status is None:
                         print('missing ref and status!')
@@ -387,7 +407,8 @@ class Matcher(object):
 
         for reason in self.unmatchable:
             out = csv.writer(open('unmatchable.{}'.format(reason), 'w+'))
-            flatten = lambda o: o._asdict().items() if reason == 'exchanges' else sorted(o.items())
+            is_exchanges = lambda r: r.startswith('exchanges')
+            flatten = lambda o: o._asdict().items() if is_exchanges(reason) else sorted(o.items())
             for rec in self.unmatchable[reason]:
                 out.writerow([kv[1] for kv in flatten(rec)])
 
