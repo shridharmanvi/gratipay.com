@@ -8,7 +8,7 @@ class Tests(BrowserHarness):
 
     def assertDiscovery(self):
         instructions = self.css('.instructions').text
-        assert instructions == 'Paste a package.json to find packages to pay for:'
+        assert instructions == 'Paste your own package.json:'
 
     def test_anon_gets_discovery_page_by_default(self):
         self.visit('/on/npm/')
