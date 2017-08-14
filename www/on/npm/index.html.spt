@@ -184,7 +184,7 @@ if request.method == 'POST':
 
     <div class="important-button">
         <button type="submit" class="selected large">
-            {{ _('Find packages') }}
+            {{ _('Continue') }}
         </button>
     </div>
 </form>
