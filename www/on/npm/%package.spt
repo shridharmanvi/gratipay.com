@@ -91,7 +91,7 @@ if user.participant:
                                 {{ icons.STATUS_ICONS['failure']|safe }}</span>
                             {{ _('Linked to a different account') }}
                         {% else %}
-                            {{ _('Ready to use') }}
+                            {{ _('Ready to verify') }}
                             {% if group == PRIMARY %}
                                 &middot; <span class="status-icon feature">
                                     {{ icons.STATUS_ICONS['feature']|safe }}</span>
