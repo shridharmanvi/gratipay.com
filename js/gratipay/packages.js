@@ -1,12 +1,19 @@
 Gratipay.packages = {};
 
 Gratipay.packages.initBulk = function() {
-    $('button.apply').on('click', Gratipay.packages.postBulk);
+    $('.important-button button').on('click', Gratipay.packages.postBulk);
 };
 
 Gratipay.packages.initSingle = function() {
-    Gratipay.Select('.gratipay-select');
-    $('button.apply').on('click', Gratipay.packages.postOne);
+    Gratipay.Select('.gratipay-select', Gratipay.packages.selectOne);
+    $('.important-button button').on('click', Gratipay.packages.postOne);
+};
+
+
+Gratipay.packages.selectOne = function($li) {
+    var action = $li.data('action');
+    $('.important-button button');
+    console.log($li);
 };
 
 
@@ -33,7 +40,7 @@ Gratipay.packages.postOne = function(e) {
 
 Gratipay.packages.post = function(email, package_ids, show_email) {
     var action = 'start-verification';
-    var $button = $('button.apply')
+    var $button = $('.important-button button')
 
     $button.prop('disabled', true);
     function reenable() { $button.prop('disabled', false); }

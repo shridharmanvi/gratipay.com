@@ -13,6 +13,7 @@ class Test(BrowserHarness):
         self.make_participant('alice', claimed_time='now')
         self.sign_in('alice')
         self.visit('/on/npm/foo')
+        import pdb; pdb.set_trace()
         self.css('#content label')[0].click() # activate select
         self.css('#content label')[choice].click()
         self.css('#content button')[0].click()
